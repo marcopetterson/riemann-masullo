@@ -3,6 +3,7 @@ module
 public import RiemannMasullo.Ch07_SchauderBasesZeta.Sec3b
 import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
 import RiemannMasullo.ForMathlib.NumberTheory.LinearFormsInLogarithms
+import RiemannMasullo.ForMathlib.NumberTheory.Transcendental.BakerCoreBridge
 public import Mathlib.Analysis.SpecialFunctions.Complex.Circle
 public import Mathlib.NumberTheory.NumberField.Cyclotomic.Ideal
 public import Mathlib.NumberTheory.Real.Irrational
@@ -31,8 +32,8 @@ import Mathlib.Topology.Instances.AddCircle.DenseSubgroup
 Issue #7336 concerns the single-place estimate in the reconstruction of Theorem 7.3.3.4
 (pp. 360–363), with the coefficient change on p. 349. We verify the quartic prime data,
 the explicit phases and their pole-lattice behavior, and a necessary bound for
-squared-height records. The mixed two-place estimate uses a cited classical input
-on three fixed logarithms.
+squared-height records. The mixed two-place estimate uses the Baker–Wüstholz bound for
+three fixed logarithms, proved from the Baker core (`Baker.bakerCoreExists`).
 -/
 
 @[expose] public noncomputable section
@@ -3194,55 +3195,6 @@ theorem disjoint_prime_quotients_outside_twoIntegerRadicals {P Q R S : ℕ}
     omega
   simpa [x,y] using And.intro hind hout
 
-/-- The remaining classical positive-real input after extracting all radicals
-of Laurent monomials in two integer generators. On rational bases the
-excluded class is recognized by `twoIntegerRadicalsTest`. -/
-private theorem algebraic_logRatio_not_liouville_outside_twoIntegerRadicals (p q : ℝ)
-    (hp : 0<p) (hq : 0<q) (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
-    (hind : ∀ m n : ℤ, p^m=q^n → m=0 ∧ n=0) (hout : ¬ GeneratedByTwoIntegerRadicals p q) :
-    ¬ Liouville (Real.log p/Real.log q) := by
-  sorry
-
-/-- For independent positive algebraic bases outside the separate natural-power
-case, finite irrationality measure follows from the integer input on a common
-two-generator Laurent-radical group and the residual outside those groups. -/
-private theorem algebraic_logRatio_not_liouville_without_natural_powers (p q : ℝ)
-    (hp : 0 < p) (hq : 0 < q) (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
-    (hind : ∀ m n : ℤ, p ^ m = q ^ n → m = 0 ∧ n = 0)
-    (houtside : ¬ ∃ (P Q : ℕ) (r s : ℤ), 1 < P ∧ 1 < Q ∧ r ≠ 0 ∧ s ≠ 0 ∧
-      p ^ r = (P : ℝ) ∧ q ^ s = (Q : ℝ)) :
-    ¬ Liouville (Real.log p / Real.log q) := by
-  by_cases hspan : GeneratedByTwoIntegerRadicals p q
-  · have hq1 : q ≠ 1 := by
-      intro h1
-      have he := (hind 0 1 (by simp [h1])).2
-      omega
-    exact (positive_powerSeparation_iff_not_liouville p q hp hq hq1).mp
-      (positive_powerSeparation_of_twoIntegerRadicals hp hq hspan)
-  · exact algebraic_logRatio_not_liouville_outside_twoIntegerRadicals p q hp hq hpA hqA hind hspan
-
-/-- Classical input: the multiplicatively independent, positive-real two-logarithm case
-of Baker and Wüstholz, *Logarithmic forms and group varieties*, J. reine angew. Math. 442
-(1993), 19–62. For two fixed positive algebraic numbers, nonidentity power quotients stay
-an inverse-polynomial distance from one. The integer two-logarithm input handles pairs
-with integral powers that are natural numbers greater than one. The remaining classical
-input is finite irrationality measure for the real logarithm ratio. -/
-private theorem positive_independent_power_separation (p q : ℝ) (hp : 0 < p) (hq : 0 < q)
-    (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
-    (hind : ∀ m n : ℤ, p ^ m = q ^ n → m = 0 ∧ n = 0) :
-    ∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, p ^ m / q ^ n ≠ 1 →
-      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ |p ^ m / q ^ n - 1| := by
-  by_cases hnat : ∃ (P Q : ℕ) (r s : ℤ), 1 < P ∧ 1 < Q ∧ r ≠ 0 ∧ s ≠ 0 ∧
-      p ^ r = (P : ℝ) ∧ q ^ s = (Q : ℝ)
-  · obtain ⟨P, Q, r, s, hP, hQ, hr, hs, heP, heQ⟩ := hnat
-    exact positive_powerSeparation_of_natural_powers hp hq P Q hP hQ r s hr hs heP heQ
-  · have hq' : q ≠ 1 := by
-      intro hq1
-      have h := hind 0 1 (by simp [hq1])
-      omega
-    exact (positive_powerSeparation_iff_not_liouville p q hp hq hq').mpr
-      (algebraic_logRatio_not_liouville_without_natural_powers p q hp hq hpA hqA hind hnat)
-
 /-- If the exponentials of u and v are multiplicatively independent, any
 choices of these two logarithms are rationally independent together with
 the principal logarithm of -1. Doubling a relation removes the torsion
@@ -3520,24 +3472,95 @@ theorem fixedThreeLogs_of_bakerFeldman_independent (hcore : BakerFeldmanIndepend
     exact powerSeparation_of_bakerFeldman_independent hcore u v huA hvA
       (norm_ne_zero_iff.mp (hu.trans_ne one_ne_zero)) (norm_ne_zero_iff.mp (hv.trans_ne one_ne_zero))
 
-/-- Classical input: for two multiplicatively independent algebraic numbers on the unit
-circle, each nonidentity power quotient has an inverse-polynomial distance from one.
-This is the unit-circle consequence of Baker and Wüstholz, *Logarithmic forms and group
-varieties*, J. reine angew. Math. 442 (1993), 19–62, applied to the principal logarithms of
-the two phases and of `-1`. The distance here is the ordinary complex chord length. -/
+/-- The independent Baker–Feldman bound in rank three and coefficient degree one, proved:
+`Baker.bakerFeldmanIndependentThree_of_bakerCore` (the port of `BAKER_LOWER_BOUND_INDEPENDENT`
+of HOL Light) applied to `Baker.bakerCoreExists` (the port of `BAKER_CORE_EXISTS`). -/
+theorem bakerFeldmanIndependentThree : BakerFeldmanIndependentThree :=
+  Baker.bakerFeldmanIndependentThree_of_bakerCore Baker.bakerCoreExists
+
+/-- The positive-real input outside the radicals of Laurent monomials in two integer
+generators. On rational bases the excluded class is recognized by `twoIntegerRadicalsTest`.
+Proved from the independent Baker–Feldman bound `bakerFeldmanIndependentThree`, applied to the
+two bases as complex numbers; the hypothesis `hout` is not used. -/
+private theorem algebraic_logRatio_not_liouville_outside_twoIntegerRadicals (p q : ℝ)
+    (hp : 0<p) (hq : 0<q) (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
+    (hind : ∀ m n : ℤ, p^m=q^n → m=0 ∧ n=0) (_hout : ¬ GeneratedByTwoIntegerRadicals p q) :
+    ¬ Liouville (Real.log p/Real.log q) := by
+  have hq1 : q ≠ 1 := by
+    intro h1
+    have := (hind 0 1 (by simp [h1])).2
+    omega
+  apply (positive_powerSeparation_iff_not_liouville p q hp hq hq1).mp
+  obtain ⟨C, hC, d, hd, h⟩ := powerSeparation_of_bakerFeldman_independent
+    bakerFeldmanIndependentThree (p : ℂ) (q : ℂ) (hpA.algebraMap (A := ℂ))
+    (hqA.algebraMap (A := ℂ)) (Complex.ofReal_ne_zero.mpr hp.ne')
+    (Complex.ofReal_ne_zero.mpr hq.ne') (fun m n he ↦ hind m n (by exact_mod_cast he))
+  refine ⟨C, hC, d, hd, fun m n hne ↦ ?_⟩
+  have e : (p : ℂ) ^ m / (q : ℂ) ^ n - 1 = ((p ^ m / q ^ n - 1 : ℝ) : ℂ) := by push_cast; ring
+  have := h m n (by rw [ne_eq, ← sub_eq_zero, e, Complex.ofReal_eq_zero, sub_eq_zero]; exact hne)
+  rwa [e, Complex.norm_real, Real.norm_eq_abs] at this
+
+/-- For independent positive algebraic bases outside the separate natural-power
+case, finite irrationality measure follows from the integer input on a common
+two-generator Laurent-radical group and the residual outside those groups. -/
+private theorem algebraic_logRatio_not_liouville_without_natural_powers (p q : ℝ)
+    (hp : 0 < p) (hq : 0 < q) (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
+    (hind : ∀ m n : ℤ, p ^ m = q ^ n → m = 0 ∧ n = 0)
+    (houtside : ¬ ∃ (P Q : ℕ) (r s : ℤ), 1 < P ∧ 1 < Q ∧ r ≠ 0 ∧ s ≠ 0 ∧
+      p ^ r = (P : ℝ) ∧ q ^ s = (Q : ℝ)) :
+    ¬ Liouville (Real.log p / Real.log q) := by
+  by_cases hspan : GeneratedByTwoIntegerRadicals p q
+  · have hq1 : q ≠ 1 := by
+      intro h1
+      have he := (hind 0 1 (by simp [h1])).2
+      omega
+    exact (positive_powerSeparation_iff_not_liouville p q hp hq hq1).mp
+      (positive_powerSeparation_of_twoIntegerRadicals hp hq hspan)
+  · exact algebraic_logRatio_not_liouville_outside_twoIntegerRadicals p q hp hq hpA hqA hind hspan
+
+/-- The multiplicatively independent, positive-real two-logarithm case of Baker and
+Wüstholz, *Logarithmic forms and group varieties*, J. reine angew. Math. 442 (1993), 19–62.
+For two fixed positive algebraic numbers, nonidentity power quotients stay an
+inverse-polynomial distance from one. The integer two-logarithm input handles pairs with
+integral powers that are natural numbers greater than one; the rest is finite irrationality
+measure for the real logarithm ratio, which is proved from `bakerFeldmanIndependentThree`. -/
+private theorem positive_independent_power_separation (p q : ℝ) (hp : 0 < p) (hq : 0 < q)
+    (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
+    (hind : ∀ m n : ℤ, p ^ m = q ^ n → m = 0 ∧ n = 0) :
+    ∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, p ^ m / q ^ n ≠ 1 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ |p ^ m / q ^ n - 1| := by
+  by_cases hnat : ∃ (P Q : ℕ) (r s : ℤ), 1 < P ∧ 1 < Q ∧ r ≠ 0 ∧ s ≠ 0 ∧
+      p ^ r = (P : ℝ) ∧ q ^ s = (Q : ℝ)
+  · obtain ⟨P, Q, r, s, hP, hQ, hr, hs, heP, heQ⟩ := hnat
+    exact positive_powerSeparation_of_natural_powers hp hq P Q hP hQ r s hr hs heP heQ
+  · have hq' : q ≠ 1 := by
+      intro hq1
+      have h := hind 0 1 (by simp [hq1])
+      omega
+    exact (positive_powerSeparation_iff_not_liouville p q hp hq hq').mpr
+      (algebraic_logRatio_not_liouville_without_natural_powers p q hp hq hpA hqA hind hnat)
+
+/-- For two multiplicatively independent algebraic numbers on the unit circle, each
+nonidentity power quotient has an inverse-polynomial distance from one. This is the
+unit-circle consequence of Baker and Wüstholz, *Logarithmic forms and group varieties*,
+J. reine angew. Math. 442 (1993), 19–62, applied to the principal logarithms of the two
+phases and of `-1`. The distance here is the ordinary complex chord length. Proved from the
+independent Baker–Feldman bound `bakerFeldmanIndependentThree`. -/
 private theorem circle_independent_power_separation (a b : ℂ)
     (haA : IsAlgebraic ℚ a) (hbA : IsAlgebraic ℚ b) (ha : ‖a‖ = 1) (hb : ‖b‖ = 1)
     (hind : ∀ m n : ℤ, a ^ m = b ^ n → m = 0 ∧ n = 0) :
     ∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, a ^ m / b ^ n ≠ 1 →
-      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ ‖a ^ m / b ^ n - 1‖ := by
-  sorry
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ ‖a ^ m / b ^ n - 1‖ :=
+  powerSeparation_of_bakerFeldman_independent bakerFeldmanIndependentThree a b haA hbA
+    (norm_ne_zero_iff.mp (ha.trans_ne one_ne_zero)) (norm_ne_zero_iff.mp (hb.trans_ne one_ne_zero))
+    hind
 
 end LogarithmicForm
 
 /-- Baker–Wüstholz for three fixed complex logarithms, including the principal logarithm of
 `-1`. See A. Baker and G. Wüstholz, *Logarithmic forms and group varieties*, J. reine angew.
 Math. 442 (1993), 19–62, doi:10.1515/crll.1993.442.19, and G. Wüstholz, *One Century of
-Logarithmic Forms*, §3, pp. 5–6. Proved here from the two classical inputs
+Logarithmic Forms*, §3, pp. 5–6. Proved here from
 `LogarithmicForm.positive_independent_power_separation` and
 `LogarithmicForm.circle_independent_power_separation`, which are its cases of two
 multiplicatively independent bases, both positive or both on the unit circle (#7513).

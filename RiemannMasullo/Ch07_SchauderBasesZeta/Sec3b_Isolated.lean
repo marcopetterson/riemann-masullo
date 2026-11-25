@@ -8,6 +8,7 @@ public import Mathlib.NumberTheory.NumberField.Cyclotomic.Ideal
 public import Mathlib.NumberTheory.Real.Irrational
 public import Mathlib.NumberTheory.Transcendental.Liouville.Basic
 public import Mathlib.RingTheory.PicardGroup
+public import Mathlib.NumberTheory.Padics.PadicVal.Basic
 import Mathlib.Analysis.Complex.IsIntegral
 import Mathlib.Analysis.Real.Pi.Bounds
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.Bounds
@@ -2772,17 +2773,453 @@ theorem positive_powerSeparation_of_natural_powers {p q : ℝ} (hp : 0 < p) (hq 
     _ = (C / (K * H) ^ d) / D := by rw [mul_pow]; ring
     _ ≤ _ := (div_le_iff₀ hD).mpr (by simpa [mul_comm] using hh)
 
-/-- Residual classical two-logarithm input for positive algebraic bases. Its
-ratio has finite irrationality measure even when one of the two bases has
-no integral power which is an integer greater than one. The complementary
-case is covered by the project's integer two-logarithm input. -/
+/-- A common nonzero power of each base is an integral Laurent monomial in
+the same two positive integers. The two exponent vectors may be arbitrary. -/
+def GeneratedByTwoIntegerRadicals (p q : ℝ) : Prop :=
+  ∃ (P Q : ℕ) (r a b c d : ℤ), 1 < P ∧ 1 < Q ∧ r ≠ 0 ∧
+    p^r = (P:ℝ)^a*(Q:ℝ)^b ∧ q^r = (P:ℝ)^c*(Q:ℝ)^d
+
+/-- Polynomial lower bounds for two logarithms pass to Laurent monomials and
+their common radicals. The exponent of the lower bound is preserved, even when
+the exponent matrix is singular. -/
+private theorem positive_logForms_laurent {P Q p q : ℝ} (hP : 0 < P) (hQ : 0 < Q)
+    (r a b c d : ℤ) (hr : r ≠ 0) (hp : p^r = P^a*Q^b) (hq : q^r = P^c*Q^d)
+    {D : ℕ} {C : ℝ} (hC : 0 < C)
+    (h : ∀ i j : ℤ, (i:ℝ)*Real.log P - j*Real.log Q ≠ 0 →
+      C/(1+|(i:ℝ)|+|(j:ℝ)|)^D ≤ |(i:ℝ)*Real.log P - j*Real.log Q|) :
+    ∃ C' > (0:ℝ), ∀ m n : ℤ, (m:ℝ)*Real.log p - n*Real.log q ≠ 0 →
+      C'/(1+|(m:ℝ)|+|(n:ℝ)|)^D ≤ |(m:ℝ)*Real.log p - n*Real.log q| := by
+  have hpr : (r:ℝ)*Real.log p = (a:ℝ)*Real.log P + b*Real.log Q := by
+    simpa only [Real.log_zpow, Real.log_mul (zpow_ne_zero _ hP.ne') (zpow_ne_zero _ hQ.ne')] using congrArg Real.log hp
+  have hqr : (r:ℝ)*Real.log q = (c:ℝ)*Real.log P + d*Real.log Q := by
+    simpa only [Real.log_zpow, Real.log_mul (zpow_ne_zero _ hP.ne') (zpow_ne_zero _ hQ.ne')] using congrArg Real.log hq
+  let K := 1+|(a:ℝ)|+|(b:ℝ)|+|(c:ℝ)|+|(d:ℝ)|
+  have hK : 0 < K := by dsimp [K]; positivity
+  have hr' : 0 < |(r:ℝ)| := abs_pos.mpr (by exact_mod_cast hr)
+  refine ⟨C/K^D/|(r:ℝ)|,by positivity,?_⟩
+  intro m n hn
+  let H := 1+|(m:ℝ)|+|(n:ℝ)|
+  have hmH : |(m:ℝ)| ≤ H := by dsimp [H]; linarith [abs_nonneg (n:ℝ)]
+  have hnH : |(n:ℝ)| ≤ H := by dsimp [H]; linarith [abs_nonneg (m:ℝ)]
+  have hH : 1 ≤ H := by dsimp [H]; linarith [abs_nonneg (m:ℝ),abs_nonneg (n:ℝ)]
+  have hmixed (x y : ℤ) : |((x*m-y*n:ℤ):ℝ)| ≤ |(x:ℝ)| *H + |(y:ℝ)| *H := by
+    push_cast
+    apply (abs_sub _ _).trans
+    rw [abs_mul,abs_mul]
+    gcongr
+  let i := a*m-c*n
+  let j := d*n-b*m
+  have hj : |(j:ℝ)| ≤ |(b:ℝ)| *H + |(d:ℝ)| *H := by
+    dsimp [j]; rw [show d*n-b*m = -(b*m-d*n) by ring,Int.cast_neg,abs_neg]; exact hmixed _ _
+  have hsize : 1+|(i:ℝ)|+|(j:ℝ)| ≤ K*H := by dsimp [K]; nlinarith only [hmixed a c,hj,hH]
+  have hid : (i:ℝ)*Real.log P - j*Real.log Q = r*((m:ℝ)*Real.log p - n*Real.log q) := by
+    dsimp [i,j]; push_cast
+    linear_combination -(m:ℝ)*hpr + (n:ℝ)*hqr
+  have hform := h i j (hid ▸ mul_ne_zero (by exact_mod_cast hr) hn)
+  rw [hid,abs_mul] at hform
+  have hbase : 0 < 1+|(i:ℝ)|+|(j:ℝ)| := by positivity
+  have hh := (div_le_div_of_nonneg_left hC.le (pow_pos hbase D) (pow_le_pow_left₀ hbase.le hsize D)).trans hform
+  change C/K^D/|(r:ℝ)|/H^D ≤ _
+  calc _ = (C/(K*H)^D)/|(r:ℝ)| := by rw [mul_pow]; ring
+       _ ≤ _ := (div_le_iff₀ hr').mpr (by simpa only [mul_comm |(r:ℝ)|] using hh)
+
+/-- The existing two-integer logarithm input suffices whenever both positive
+bases are radicals of Laurent monomials in two common integer generators. -/
+theorem positive_powerSeparation_of_twoIntegerRadicals {p q : ℝ} (hp : 0 < p) (hq : 0 < q)
+    (hspan : GeneratedByTwoIntegerRadicals p q) :
+    ∃ C > (0:ℝ), ∃ D : ℕ, 0 < D ∧ ∀ m n : ℤ, p^m/q^n ≠ 1 →
+      C/(1+|(m:ℝ)|+|(n:ℝ)|)^D ≤ |p^m/q^n-1| := by
+  obtain ⟨P,Q,r,a,b,c,d,hP,hQ,hr,hpr,hqr⟩ := hspan
+  have hp' : 0 < (P:ℝ) := by exact_mod_cast (by omega : 0 < P)
+  have hq' : 0 < (Q:ℝ) := by exact_mod_cast (by omega : 0 < Q)
+  have hnat := (positive_powerSeparation_iff_not_liouville P Q hp' hq' (by exact_mod_cast (by omega : Q≠1))).mpr
+    (natural_logRatio_not_liouville P Q hP hQ)
+  obtain ⟨C,hC,D,hD,hF⟩ := (positive_powerSeparation_iff_logForms hp' hq').mp hnat
+  obtain ⟨C',hC',hf⟩ := positive_logForms_laurent hp' hq' r a b c d hr hpr hqr hC hF
+  exact (positive_powerSeparation_iff_logForms hp hq).mpr ⟨C',hC',D,hD,hf⟩
+
+/-- The prime support of a positive rational yields explicit exponents in
+two generators, by taking the differences of numerator and denominator valuations. -/
+private theorem rational_two_prime_monomial {P Q : ℕ} (hp : P.Prime) (hq : Q.Prime) (hPQ : P ≠ Q)
+    (x : ℚ) (hx : 0 < x) (hnum : x.num.natAbs.primeFactors ⊆ {P,Q})
+    (hden : x.den.primeFactors ⊆ {P,Q}) :
+    (x:ℝ) = (P:ℝ)^((x.num.natAbs.factorization P:ℤ)-x.den.factorization P) *
+      (Q:ℝ)^((x.num.natAbs.factorization Q:ℤ)-x.den.factorization Q) := by
+  have hprod (n : ℕ) (hn : n ≠ 0) (hs : n.primeFactors ⊆ {P,Q}) :
+      n = P^(n.factorization P)*Q^(n.factorization Q) := by
+    calc n = ∏ k ∈ n.primeFactors, k^n.factorization k := Nat.prod_primeFactors_pow_factorization hn
+         _ = ∏ k ∈ ({P,Q} : Finset ℕ), k^n.factorization k := by
+           apply Finset.prod_subset hs
+           intro k _ hk
+           have hzero : n.factorization k = 0 := Finsupp.notMem_support_iff.mp hk
+           simp [hzero]
+         _ = _ := by simp [hPQ]
+  have hpos := Rat.num_pos.mpr hx
+  have hnum' : (x.num : ℝ) = (P:ℝ)^(x.num.natAbs.factorization P)*(Q:ℝ)^(x.num.natAbs.factorization Q) := by
+    have h := (Nat.cast_inj (R := ℝ)).mpr (hprod _ (Int.natAbs_ne_zero.mpr hpos.ne') hnum)
+    simpa only [Nat.cast_mul,Nat.cast_pow,Nat.cast_natAbs,abs_of_nonneg hpos.le] using h
+  have hden' : (x.den : ℝ) = (P:ℝ)^(x.den.factorization P)*(Q:ℝ)^(x.den.factorization Q) := by
+    exact_mod_cast hprod _ x.den_ne_zero hden
+  rw [Rat.cast_def,hnum',hden',zpow_sub₀ (by exact_mod_cast hp.ne_zero),zpow_sub₀ (by exact_mod_cast hq.ne_zero)]
+  simp only [zpow_natCast]
+  ring
+
+/-- Power quotients of any two positive radicals of rational two-prime
+`S`-units satisfy the desired inverse-polynomial bound. Membership is tested
+on the reduced numerators and denominators, including negative valuations. -/
+theorem positive_powerSeparation_of_twoPrimeSupport {p q : ℝ} (hp : 0 < p) (hq : 0 < q)
+    (P Q : ℕ) (hP : P.Prime) (hQ : Q.Prime) (hPQ : P ≠ Q)
+    (r s : ℤ) (hr : r ≠ 0) (hs : s ≠ 0) (x y : ℚ) (hx : 0 < x) (hy : 0 < y)
+    (hpx : p^r = (x:ℝ)) (hqy : q^s = (y:ℝ))
+    (hxn : x.num.natAbs.primeFactors ⊆ {P,Q}) (hxd : x.den.primeFactors ⊆ {P,Q})
+    (hyn : y.num.natAbs.primeFactors ⊆ {P,Q}) (hyd : y.den.primeFactors ⊆ {P,Q}) :
+    ∃ C > (0:ℝ), ∃ D : ℕ, 0 < D ∧ ∀ m n : ℤ, p^m/q^n ≠ 1 →
+      C/(1+|(m:ℝ)|+|(n:ℝ)|)^D ≤ |p^m/q^n-1| := by
+  apply positive_powerSeparation_of_twoIntegerRadicals hp hq
+  obtain ⟨a,b,he⟩ : ∃ a b : ℤ, (x:ℝ) = (P:ℝ)^a*(Q:ℝ)^b :=
+    ⟨_,_,rational_two_prime_monomial hP hQ hPQ x hx hxn hxd⟩
+  obtain ⟨c,d,hf⟩ : ∃ c d : ℤ, (y:ℝ) = (P:ℝ)^c*(Q:ℝ)^d :=
+    ⟨_,_,rational_two_prime_monomial hP hQ hPQ y hy hyn hyd⟩
+  exact ⟨P,Q,r*s,a*s,b*s,c*r,d*r,hP.one_lt,hQ.one_lt,mul_ne_zero hr hs,
+    by rw [zpow_mul,hpx,he,mul_zpow,← zpow_mul,← zpow_mul],
+    by rw [mul_comm r s,zpow_mul,hqy,hf,mul_zpow,← zpow_mul,← zpow_mul]⟩
+
+private theorem positive_monomial_combine {p q : ℝ} (hp : 0 < p) (hq : 0 < q) (a b c d i j : ℤ) :
+    (p^a*q^b)^i*(p^c*q^d)^j = p^(a*i+c*j)*q^(b*i+d*j) := by
+  rw [mul_zpow,mul_zpow,← zpow_mul,← zpow_mul,← zpow_mul,← zpow_mul,
+    zpow_add₀ hp.ne',zpow_add₀ hq.ne']
+  ring
+
+/-- For independent positive bases, a two-integer logarithm reduction by
+Laurent monomials and radicals is possible exactly when the multiplicative
+group contains two natural numbers greater than one with independent exponent vectors. -/
+theorem twoIntegerRadicals_iff_integer_monomials {p q : ℝ} (hp : 0 < p) (hq : 0 < q)
+    (hind : ∀ m n : ℤ, p^m=q^n → m=0 ∧ n=0) :
+    GeneratedByTwoIntegerRadicals p q ↔ ∃ (P Q : ℕ) (a b c d : ℤ), 1<P ∧ 1<Q ∧
+      a*d-b*c ≠ 0 ∧ p^a*q^b=(P:ℝ) ∧ p^c*q^d=(Q:ℝ) := by
+  constructor
+  · rintro ⟨P,Q,r,a,b,c,d,hP,hQ,hr,hpP,hqQ⟩
+    have hp' : 0 < (P:ℝ) := by exact_mod_cast (by omega : 0<P)
+    have hq' : 0 < (Q:ℝ) := by exact_mod_cast (by omega : 0<Q)
+    have he (i j : ℤ) : p^(r*i)*q^(r*j) = (P:ℝ)^(a*i+c*j)*(Q:ℝ)^(b*i+d*j) := by
+      rw [zpow_mul,zpow_mul,hpP,hqQ,positive_monomial_combine hp' hq']
+    have hker (i j : ℤ) (hi : a*i+c*j=0) (hj : b*i+d*j=0) : i=0 ∧ j=0 := by
+      have hh := he i j
+      rw [hi,hj,zpow_zero,zpow_zero,mul_one] at hh
+      have hpow : p^(r*i) = q^(-(r*j)) := by
+        rw [zpow_neg]; exact eq_inv_of_mul_eq_one_left hh
+      obtain ⟨h1,h2⟩ := hind _ _ hpow
+      exact ⟨(mul_eq_zero.mp h1).resolve_left hr,(mul_eq_zero.mp (neg_eq_zero.mp h2)).resolve_left hr⟩
+    let D := a*d-b*c
+    have hD : D≠0 := by
+      intro hz
+      change a*d-b*c=0 at hz
+      obtain ⟨hd,hb'⟩ := hker d (-b) (by linarith) (by ring)
+      have hb := neg_eq_zero.mp hb'
+      obtain ⟨hc,ha'⟩ := hker c (-a) (by ring) (by simp [hb,hd])
+      have ha := neg_eq_zero.mp ha'
+      have h := (hker 1 0 (by simp [ha]) (by simp [hb])).1
+      omega
+    let e := D.sign
+    have he0 : e ≠ 0 := by simpa [e] using hD
+    have hDe : D*e=(D.natAbs:ℤ) := Int.mul_sign_self _
+    let k := D.natAbs
+    have hk : k ≠ 0 := Int.natAbs_ne_zero.mpr hD
+    refine ⟨P^k,Q^k,r*(d*e),r*(-b*e),r*(-c*e),r*(a*e),
+      one_lt_pow₀ hP hk,one_lt_pow₀ hQ hk,?_,?_,?_⟩
+    · have hh : r*(d*e)*(r*(a*e)) - r*(-b*e)*(r*(-c*e)) = r^2*e^2*D := by dsimp [D]; ring
+      rw [hh]; exact mul_ne_zero (mul_ne_zero (pow_ne_zero _ hr) (pow_ne_zero _ he0)) hD
+    · rw [he,show a*(d*e)+c*(-b*e)=D*e from by dsimp [D]; ring,
+        show b*(d*e)+d*(-b*e)=0 from by ring,hDe]
+      simp only [k,zpow_zero,mul_one,zpow_natCast,Nat.cast_pow]
+    · rw [he,show a*(-c*e)+c*(a*e)=0 from by ring,
+        show b*(-c*e)+d*(a*e)=D*e from by dsimp [D]; ring,hDe]
+      simp only [k,zpow_zero,one_mul,zpow_natCast,Nat.cast_pow]
+  · rintro ⟨P,Q,a,b,c,d,hP,hQ,hD,h1,h2⟩
+    refine ⟨P,Q,a*d-b*c,d,-b,-c,a,hP,hQ,hD,?_,?_⟩
+    · rw [← h1,← h2,positive_monomial_combine hp hq,show b*d+d*(-b)=0 from by ring,zpow_zero,mul_one]
+      congr 1; ring
+    · rw [← h1,← h2,positive_monomial_combine hp hq,show a*(-c)+c*a=0 from by ring,zpow_zero,one_mul]
+      congr 1; ring
+
+private theorem positive_rational_natural_iff_valuations (q : ℚ) (hq : 0 < q) :
+    (∃ n : ℕ, q=n) ↔ ∀ l : ℕ, l.Prime → 0 ≤ padicValRat l q := by
+  constructor
+  · rintro ⟨n,rfl⟩ l _
+    exact zero_le_padicValRat_of_nat n
+  · intro h
+    have hden : q.den=1 := by
+      by_contra hn
+      obtain ⟨l,hl,hd⟩ := Nat.exists_prime_and_dvd hn
+      have hm := hl.factorization_pos_of_dvd q.den_ne_zero hd
+      rw [Nat.factorization_def _ hl] at hm
+      rcases q.num_or_den_zero_padicVal hl with hnum | hzero
+      · have hv := h l hl
+        rw [padicValRat_def,hnum] at hv
+        omega
+      · omega
+    refine ⟨q.num.natAbs,?_⟩
+    calc q = (q.num : ℚ)/q.den := q.num_div_den.symm
+         _ = _ := by simp [hden,abs_of_nonneg (Rat.num_nonneg.mpr hq.le)]
+
+private theorem rational_monomial_valuation {x y : ℚ} (hx : 0<x) (hy : 0<y)
+    (l : ℕ) (hl : l.Prime) (i j : ℤ) :
+    padicValRat l (x^i*y^j) = i*padicValRat l x+j*padicValRat l y := by
+  let : Fact l.Prime := ⟨hl⟩
+  rw [padicValRat.mul (zpow_ne_zero _ hx.ne') (zpow_ne_zero _ hy.ne'),padicValRat.zpow,padicValRat.zpow]
+
+/-- For independent positive rational bases the two-integer reduction has
+an exact valuation criterion. All nonzero pairs of prime valuations must lie
+in a common open half-plane with integral normal. Only primes in the reduced
+numerators and denominators can yield nonzero pairs. -/
+theorem twoIntegerRadicals_rat_iff_valuation_direction (x y : ℚ) (hx : 0<x) (hy : 0<y)
+    (hind : ∀ m n : ℤ, (x:ℝ)^m=(y:ℝ)^n → m=0 ∧ n=0) :
+    GeneratedByTwoIntegerRadicals (x:ℝ) (y:ℝ) ↔ ∃ a b : ℤ, ∀ l : ℕ, l.Prime →
+      (padicValRat l x≠0 ∨ padicValRat l y≠0) → 0<a*padicValRat l x+b*padicValRat l y := by
+  rw [twoIntegerRadicals_iff_integer_monomials (by exact_mod_cast hx) (by exact_mod_cast hy) hind]
+  constructor
+  · rintro ⟨P,Q,a,b,c,d,_,_,hdet,he,hf⟩
+    refine ⟨a+c,b+d,?_⟩
+    intro l hl hne
+    let X := padicValRat l x
+    let Y := padicValRat l y
+    have hP : x^a*y^b = (P:ℚ) := by exact_mod_cast he
+    have hQ : x^c*y^d = (Q:ℚ) := by exact_mod_cast hf
+    have hi : 0 ≤ a*X+b*Y := by rw [← rational_monomial_valuation hx hy l hl,hP]; exact zero_le_padicValRat_of_nat _
+    have hj : 0 ≤ c*X+d*Y := by rw [← rational_monomial_valuation hx hy l hl,hQ]; exact zero_le_padicValRat_of_nat _
+    change 0 < (a+c)*X+(b+d)*Y
+    by_contra! hn
+    have hi0 : a*X+b*Y=0 := by linarith
+    have hj0 : c*X+d*Y=0 := by linarith
+    have hX : (a*d-b*c)*X=0 := by linear_combination d*hi0-b*hj0
+    have hY : (a*d-b*c)*Y=0 := by linear_combination a*hj0-c*hi0
+    exact hne.elim (fun h ↦ h ((mul_eq_zero.mp hX).resolve_left hdet)) (fun h ↦ h ((mul_eq_zero.mp hY).resolve_left hdet))
+  · rintro ⟨a,b,hpos⟩
+    let k : ℤ := (x.den:ℤ)+y.den+2
+    have hk : 2 ≤ k := by dsimp [k]; omega
+    have hdet : (k*a+1)*(k*b+1)-(k*b)*(k*a) ≠ 0 := by
+      intro he
+      have hd : k ∣ (1:ℤ) := ⟨-(a+b),by linarith⟩
+      have hle := Int.le_of_dvd (by decide : 0 < (1:ℤ)) hd
+      omega
+    have floorVal (q : ℚ) (l : ℕ) : -(q.den:ℤ) ≤ padicValRat l q := by
+      rw [padicValRat_def]
+      have h := Nat.multiplicity_le_self (p := l) q.den
+      omega
+    have hi (l : ℕ) (hl : l.Prime) :
+        0 ≤ (k*a+1)*padicValRat l x+(k*b)*padicValRat l y ∧
+        0 ≤ (k*a)*padicValRat l x+(k*b+1)*padicValRat l y := by
+      by_cases h : padicValRat l x≠0 ∨ padicValRat l y≠0
+      · have hz : 1 ≤ a*padicValRat l x+b*padicValRat l y := hpos l hl h
+        have hs := mul_le_mul_of_nonneg_left hz (by omega : 0≤k)
+        have hx' := floorVal x l
+        have hy' := floorVal y l
+        dsimp [k] at hs ⊢
+        constructor <;> nlinarith only [hs,hx',hy', Nat.cast_nonneg (α := ℤ) x.den, Nat.cast_nonneg (α := ℤ) y.den]
+      · push Not at h
+        simp [h.1,h.2]
+    have hw (i j : ℤ) (hij : i ≠ 0 ∨ j ≠ 0)
+        (hv : ∀ l, l.Prime → 0≤ i*padicValRat l x+j*padicValRat l y) :
+        ∃ P : ℕ, 1<P ∧ (x:ℝ)^i*(y:ℝ)^j=P := by
+      have hh := (positive_rational_natural_iff_valuations (x^i*y^j) (mul_pos (zpow_pos hx _) (zpow_pos hy _))).mpr
+        fun l hl ↦ (rational_monomial_valuation hx hy l hl i j).symm ▸ hv l hl
+      obtain ⟨P,he⟩ := hh
+      have he' : (x:ℝ)^i*(y:ℝ)^j=P := by exact_mod_cast he
+      have hP0 : 0 < P := by
+        have hh : 0<(P:ℚ) := he ▸ mul_pos (zpow_pos hx _) (zpow_pos hy _)
+        exact_mod_cast hh
+      have hP1 : P ≠ 1 := by
+        intro h1
+        rw [h1,Nat.cast_one] at he'
+        have hh := hind i (-j) (by rw [zpow_neg]; exact eq_inv_of_mul_eq_one_left he')
+        exact hij.elim (fun h ↦ h hh.1) (fun h ↦ h (neg_eq_zero.mp hh.2))
+      exact ⟨P,by omega,he'⟩
+    have h1 : k*a+1≠0 ∨ k*b≠0 := by by_contra! h; apply hdet; rw [h.1,h.2]; ring
+    have h2 : k*a≠0 ∨ k*b+1≠0 := by by_contra! h; apply hdet; rw [h.1,h.2]; ring
+    obtain ⟨P,hP,he⟩ := hw _ _ h1 fun l hl ↦ (hi l hl).1
+    obtain ⟨Q,hQ,hf⟩ := hw _ _ h2 fun l hl ↦ (hi l hl).2
+    exact ⟨P,Q,k*a+1,k*b,k*a,k*b+1,hP,hQ,hdet,he,hf⟩
+
+/-- Test a finite family of nonzero lattice vectors for common strict
+positivity by taking a lowest angular row relative to a feasible normal.
+Conversely an extreme row gives an integral feasible normal explicitly. -/
+private theorem integer_halfPlane_iff_extreme (S : Finset ℕ) (f g : ℕ → ℤ) :
+    (∃ a b : ℤ, ∀ i ∈ S, 0<a*f i+b*g i) ↔ S=∅ ∨ ∃ i ∈ S, ∀ j ∈ S,
+      0<f i*g j-g i*f j ∨ (f i*g j-g i*f j=0 ∧ 0<f i*f j+g i*g j) := by
+  constructor
+  · rintro ⟨a,b,hpos⟩
+    rcases S.eq_empty_or_nonempty with hS | hS
+    · exact Or.inl hS
+    let D (i : ℕ) := a*f i+b*g i
+    let E (i : ℕ) := -b*f i+a*g i
+    obtain ⟨i,hi,hmin⟩ := S.exists_min_image (fun j ↦ (E j:ℚ)/(D j:ℚ)) hS
+    refine Or.inr ⟨i,hi,?_⟩
+    intro j hj
+    have hDi : 0 < D i := hpos i hi
+    have hDj : 0 < D j := hpos j hj
+    have hs : E i*D j ≤ E j*D i := by
+      exact_mod_cast (div_le_div_iff₀ (by exact_mod_cast hDi) (by exact_mod_cast hDj)).mp (hmin j hj)
+    have hn : 0 < a^2+b^2 := by
+      by_contra! h
+      have ha : a=0 := by nlinarith [sq_nonneg a,sq_nonneg b]
+      have hb : b=0 := by nlinarith [sq_nonneg b]
+      simp [D,ha,hb] at hDi
+    let det := f i*g j-g i*f j
+    have hid : (a^2+b^2)*det = E j*D i-E i*D j := by dsimp [E,D,det]; ring
+    have hd : 0 ≤ det := (mul_nonneg_iff_of_pos_left hn).mp (hid ▸ sub_nonneg.mpr hs)
+    rcases hd.eq_or_lt with he | he
+    · right
+      refine ⟨he.symm,?_⟩
+      have hj' : E j*D i=E i*D j := sub_eq_zero.mp (by rw [← hid,← he,mul_zero])
+      have hc : (a^2+b^2)*(f i*f j+g i*g j)=D i*D j+E i*E j := by dsimp [D,E]; ring
+      have hprod : D i*(D i*D j+E i*E j) = ((D i)^2+(E i)^2)*D j := by linear_combination E i*hj'
+      have hsq : 0 < (D i)^2+(E i)^2 := by positivity
+      exact (mul_pos_iff_of_pos_left hn).mp (hc ▸ (mul_pos_iff_of_pos_left hDi).mp (hprod ▸ mul_pos hsq hDj))
+    · exact Or.inl he
+  · rintro (rfl | ⟨i,hi,hrow⟩)
+    · exact ⟨0,0,by simp⟩
+    let C := 1+∑ j ∈ S, |f i*f j+g i*g j|
+    have hC : 0 < C := by dsimp [C]; positivity
+    refine ⟨f i-C*g i,g i+C*f i,?_⟩
+    intro j hj
+    have hid : (f i-C*g i)*f j+(g i+C*f i)*g j = (f i*f j+g i*g j)+C*(f i*g j-g i*f j) := by ring
+    rw [hid]
+    rcases hrow j hj with hd | ⟨hz,hp⟩
+    · have hu := Finset.single_le_sum (f := fun j ↦ |f i*f j+g i*g j|) (fun _ _ ↦ abs_nonneg _) hj
+      have hh : 1 ≤ f i*g j-g i*f j := hd
+      have hm := mul_le_mul_of_nonneg_left hh hC.le
+      dsimp only [C] at hm ⊢
+      linarith [neg_abs_le (f i*f j+g i*g j)]
+    · simpa [hz] using hp
+
+/-- Finite integer test for applicability of the two-integer logarithm input
+to a pair of positive independent rationals. It enumerates the actual primes
+of their reduced numerators and denominators and compares row determinants
+and dot products. -/
+def twoIntegerRadicalsTest (x y : ℚ) : Bool :=
+  let v (q : ℚ) (l : ℕ) : ℤ := (q.num.natAbs.factorization l:ℤ)-q.den.factorization l
+  let S := (x.num.natAbs.primeFactors ∪ x.den.primeFactors ∪ y.num.natAbs.primeFactors ∪
+    y.den.primeFactors).filter (fun l ↦ v x l≠0 ∨ v y l≠0)
+  decide (S=∅ ∨ ∃ i ∈ S, ∀ j ∈ S,
+    0<v x i*v y j-v y i*v x j ∨ (v x i*v y j-v y i*v x j=0 ∧ 0<v x i*v x j+v y i*v y j))
+
+/-- Correctness of the finite test, including both affirmative certificates
+and obstructions to any Laurent-monomial reduction to the integer theorem. -/
+theorem twoIntegerRadicals_rat_iff_test (x y : ℚ) (hx : 0<x) (hy : 0<y)
+    (hind : ∀ m n : ℤ, (x:ℝ)^m=(y:ℝ)^n → m=0 ∧ n=0) :
+    GeneratedByTwoIntegerRadicals (x:ℝ) (y:ℝ) ↔ twoIntegerRadicalsTest x y = true := by
+  let v (q : ℚ) (l : ℕ) : ℤ := (q.num.natAbs.factorization l:ℤ)-q.den.factorization l
+  let primes (q : ℚ) := q.num.natAbs.primeFactors ∪ q.den.primeFactors
+  let S := (primes x ∪ primes y).filter (fun l ↦ v x l≠0 ∨ v y l≠0)
+  have hv (q : ℚ) {l : ℕ} (hl : l.Prime) : padicValRat l q=v q l := by
+    simp only [padicValRat_def,padicValInt,v,Nat.factorization_def _ hl]
+  have hs (q : ℚ) {l : ℕ} (hn : v q l ≠ 0) : l ∈ primes q := by
+    by_contra h
+    have hh : l ∉ q.num.natAbs.primeFactors ∧ l ∉ q.den.primeFactors := by simpa [primes] using h
+    have h1 : q.num.natAbs.factorization l = 0 := Finsupp.notMem_support_iff.mp hh.1
+    have h2 : q.den.factorization l = 0 := Finsupp.notMem_support_iff.mp hh.2
+    exact hn (by simp [v,h1,h2])
+  have hp (q : ℚ) {l : ℕ} (h : l∈primes q) : l.Prime := by
+    rcases Finset.mem_union.mp h with h | h <;> exact Nat.prime_of_mem_primeFactors h
+  rw [twoIntegerRadicals_rat_iff_valuation_direction x y hx hy hind]
+  calc _ ↔ ∃ a b : ℤ, ∀ i ∈ S, 0<a*v x i+b*v y i := by
+         constructor
+         · rintro ⟨a,b,hab⟩
+           refine ⟨a,b,?_⟩
+           intro i hi
+           obtain ⟨hs,hn⟩ := Finset.mem_filter.mp hi
+           have hl := (Finset.mem_union.mp hs).elim (hp x) (hp y)
+           simpa only [hv _ hl] using hab i hl (by simpa only [hv _ hl] using hn)
+         · rintro ⟨a,b,hab⟩
+           refine ⟨a,b,?_⟩
+           intro i hi hn
+           simp only [hv _ hi] at hn ⊢
+           exact hab i (Finset.mem_filter.mpr ⟨Finset.mem_union.mpr (hn.imp (hs x) (hs y)),hn⟩)
+       _ ↔ _ := by
+         rw [integer_halfPlane_iff_extreme]
+         simp only [twoIntegerRadicalsTest,← Finset.union_assoc,primes,S,v,decide_eq_true_eq]
+
+/-- A positive rational pair passing the finite factorization test has the
+required lower bound from the integer two-logarithm theorem alone. -/
+theorem positive_powerSeparation_of_rat_test (x y : ℚ) (hx : 0<x) (hy : 0<y)
+    (hind : ∀ m n : ℤ, (x:ℝ)^m=(y:ℝ)^n → m=0 ∧ n=0) (h : twoIntegerRadicalsTest x y = true) :
+    ∃ C > (0:ℝ), ∃ D : ℕ, 0<D ∧ ∀ m n : ℤ, (x:ℝ)^m/(y:ℝ)^n ≠ 1 →
+      C/(1+|(m:ℝ)|+|(n:ℝ)|)^D ≤ |(x:ℝ)^m/(y:ℝ)^n-1| :=
+  positive_powerSeparation_of_twoIntegerRadicals (by exact_mod_cast hx) (by exact_mod_cast hy)
+    ((twoIntegerRadicals_rat_iff_test x y hx hy hind).mpr h)
+
+private theorem prime_quotient_valuation {P Q l : ℕ} (hP : P.Prime) (hQ : Q.Prime) (hl : l.Prime) :
+    padicValRat l ((P:ℚ)/Q) = (if l=P then (1:ℤ) else 0) - (if l=Q then 1 else 0) := by
+  let : Fact l.Prime := ⟨hl⟩
+  have hv (u : ℕ) (hu : u.Prime) : padicValRat l (u:ℚ) = if l=u then 1 else 0 := by
+    rw [padicValRat.of_nat]
+    by_cases he : l=u
+    · subst u; simp [Nat.multiplicity_self hl.one_lt]
+    · rw [ite_eq_right he,multiplicity_eq_zero_of_not_dvd (fun h ↦ he ((Nat.prime_dvd_prime_iff_eq hl hu).mp h))]
+      rfl
+  rw [padicValRat.div (by exact_mod_cast hP.ne_zero) (by exact_mod_cast hQ.ne_zero),hv _ hP,hv _ hQ]
+
+/-- Quotients of four distinct primes are genuinely outside every two-integer
+Laurent-radical reduction, although the two positive rational bases are
+multiplicatively independent. The opposing valuations at the first numerator
+and denominator preclude a common positive direction. -/
+theorem disjoint_prime_quotients_outside_twoIntegerRadicals {P Q R S : ℕ}
+    (hP : P.Prime) (hQ : Q.Prime) (hR : R.Prime) (hS : S.Prime)
+    (hPQ : P≠Q) (hPR : P≠R) (hPS : P≠S) (hQR : Q≠R) (hQS : Q≠S) (hRS : R≠S) :
+    (∀ m n : ℤ, ((P:ℝ)/Q)^m=((R:ℝ)/S)^n → m=0 ∧ n=0) ∧
+      ¬ GeneratedByTwoIntegerRadicals ((P:ℝ)/Q) ((R:ℝ)/S) := by
+  let x : ℚ := (P:ℚ)/Q
+  let y : ℚ := (R:ℚ)/S
+  have hx : 0<x := div_pos (by exact_mod_cast hP.pos) (by exact_mod_cast hQ.pos)
+  have hy : 0<y := div_pos (by exact_mod_cast hR.pos) (by exact_mod_cast hS.pos)
+  have hPx : padicValRat P x=1 := by simp [x,prime_quotient_valuation hP hQ hP,hPQ]
+  have hPy : padicValRat P y=0 := by simp [y,prime_quotient_valuation hR hS hP,hPR,hPS]
+  have hQx : padicValRat Q x= -1 := by simp [x,prime_quotient_valuation hP hQ hQ,hPQ.symm]
+  have hQy : padicValRat Q y=0 := by simp [y,prime_quotient_valuation hR hS hQ,hQR,hQS]
+  have hRx : padicValRat R x=0 := by simp [x,prime_quotient_valuation hP hQ hR,hPR.symm,hQR.symm]
+  have hRy : padicValRat R y=1 := by simp [y,prime_quotient_valuation hR hS hR,hRS]
+  have hind : ∀ m n : ℤ, (x:ℝ)^m=(y:ℝ)^n → m=0 ∧ n=0 := by
+    intro m n he
+    have h : x^m=y^n := by exact_mod_cast he
+    have hv (l : ℕ) (hl : l.Prime) : m*padicValRat l x=n*padicValRat l y := by
+      let : Fact l.Prime := ⟨hl⟩
+      simpa only [padicValRat.zpow] using congrArg (padicValRat l) h
+    exact ⟨by simpa [hPx,hPy] using hv P hP, by simpa [hRx,hRy] using (hv R hR).symm⟩
+  have hout : ¬ GeneratedByTwoIntegerRadicals (x:ℝ) (y:ℝ) := by
+    rw [twoIntegerRadicals_rat_iff_valuation_direction x y hx hy hind]
+    rintro ⟨a,b,h⟩
+    have ha := h P hP (Or.inl (by simp [hPx]))
+    have hb := h Q hQ (Or.inl (by simp [hQx]))
+    simp only [hPx,hPy,hQx,hQy,mul_one,mul_zero,mul_neg,add_zero] at ha hb
+    omega
+  simpa [x,y] using And.intro hind hout
+
+/-- The remaining classical positive-real input after extracting all radicals
+of Laurent monomials in two integer generators. On rational bases the
+excluded class is recognized by `twoIntegerRadicalsTest`. -/
+private theorem algebraic_logRatio_not_liouville_outside_twoIntegerRadicals (p q : ℝ)
+    (hp : 0<p) (hq : 0<q) (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
+    (hind : ∀ m n : ℤ, p^m=q^n → m=0 ∧ n=0) (hout : ¬ GeneratedByTwoIntegerRadicals p q) :
+    ¬ Liouville (Real.log p/Real.log q) := by
+  sorry
+
+/-- For independent positive algebraic bases outside the separate natural-power
+case, finite irrationality measure follows from the integer input on a common
+two-generator Laurent-radical group and the residual outside those groups. -/
 private theorem algebraic_logRatio_not_liouville_without_natural_powers (p q : ℝ)
     (hp : 0 < p) (hq : 0 < q) (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
     (hind : ∀ m n : ℤ, p ^ m = q ^ n → m = 0 ∧ n = 0)
     (houtside : ¬ ∃ (P Q : ℕ) (r s : ℤ), 1 < P ∧ 1 < Q ∧ r ≠ 0 ∧ s ≠ 0 ∧
       p ^ r = (P : ℝ) ∧ q ^ s = (Q : ℝ)) :
     ¬ Liouville (Real.log p / Real.log q) := by
-  sorry
+  by_cases hspan : GeneratedByTwoIntegerRadicals p q
+  · have hq1 : q ≠ 1 := by
+      intro h1
+      have he := (hind 0 1 (by simp [h1])).2
+      omega
+    exact (positive_powerSeparation_iff_not_liouville p q hp hq hq1).mp
+      (positive_powerSeparation_of_twoIntegerRadicals hp hq hspan)
+  · exact algebraic_logRatio_not_liouville_outside_twoIntegerRadicals p q hp hq hpA hqA hind hspan
 
 /-- Classical input: the multiplicatively independent, positive-real two-logarithm case
 of Baker and Wüstholz, *Logarithmic forms and group varieties*, J. reine angew. Math. 442

@@ -2,9 +2,11 @@ module
 
 public import RiemannMasullo.Ch07_SchauderBasesZeta.Sec3b
 import RiemannMasullo.ForMathlib.NumberTheory.NumberField.Completion.FinitePlace
+import RiemannMasullo.ForMathlib.NumberTheory.LinearFormsInLogarithms
 public import Mathlib.Analysis.SpecialFunctions.Complex.Circle
 public import Mathlib.NumberTheory.NumberField.Cyclotomic.Ideal
 public import Mathlib.NumberTheory.Real.Irrational
+public import Mathlib.NumberTheory.Transcendental.Liouville.Basic
 public import Mathlib.RingTheory.PicardGroup
 import Mathlib.Analysis.Complex.IsIntegral
 import Mathlib.Analysis.Real.Pi.Bounds
@@ -2496,16 +2498,590 @@ private theorem fixed_three_of_powerSeparation
       exact dependent_positive_powerSeparation hp hq m n (by tauto) he
   · exact circle_powerSeparation_of_independent hU _ _ haU hbU (by simp [ha₀]) (by simp [hb₀])
 
+/-- Positive power quotients stay polynomially far from one precisely when
+their real logarithms stay polynomially far from zero. -/
+private theorem positive_powerSeparation_iff_logForms {p q : ℝ} (hp : 0 < p) (hq : 0 < q) :
+    (∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, p ^ m / q ^ n ≠ 1 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ |p ^ m / q ^ n - 1|) ↔
+    (∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ,
+      (m : ℝ) * Real.log p - (n : ℝ) * Real.log q ≠ 0 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ |(m : ℝ) * Real.log p - (n : ℝ) * Real.log q|) := by
+  have hlog (m n : ℤ) : Real.log (p ^ m / q ^ n) = (m : ℝ) * Real.log p - (n : ℝ) * Real.log q := by
+    rw [Real.log_div (zpow_ne_zero _ hp.ne') (zpow_ne_zero _ hq.ne'), Real.log_zpow, Real.log_zpow]
+  have hexp (m n : ℤ) : Real.exp ((m : ℝ) * Real.log p - (n : ℝ) * Real.log q) = p ^ m / q ^ n := by
+    rw [← hlog, Real.exp_log (div_pos (zpow_pos hp _) (zpow_pos hq _))]
+  have hH (m n : ℤ) (d : ℕ) : 1 ≤ (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d :=
+    one_le_pow₀ (by linarith [abs_nonneg (m : ℝ), abs_nonneg (n : ℝ)])
+  constructor
+  · rintro ⟨C, hC, d, hd, h⟩
+    refine ⟨min 1 (C / 2), lt_min zero_lt_one (by positivity), d, hd, fun m n hn ↦ ?_⟩
+    have hne : p ^ m / q ^ n ≠ 1 := fun he ↦ hn (by rw [← hlog, he, Real.log_one])
+    by_cases hs : |(m : ℝ) * Real.log p - (n : ℝ) * Real.log q| ≤ 1
+    · have hu := Real.abs_exp_sub_one_le hs
+      rw [hexp] at hu
+      have h1 := (h m n hne).trans hu
+      calc
+        _ ≤ (C / 2) / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d := by gcongr; exact min_le_right _ _
+        _ = (C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d) / 2 := by ring
+        _ ≤ _ := by linarith
+    · exact ((div_le_self (le_min zero_le_one (by positivity)) (hH _ _ _)).trans
+        (min_le_left _ _)).trans (le_of_not_ge hs)
+  · rintro ⟨C, hC, d, hd, h⟩
+    refine ⟨min (1 / 2) (C / 2), lt_min (by norm_num) (by positivity), d, hd, fun m n hn ↦ ?_⟩
+    let w := p ^ m / q ^ n
+    have hw : 0 < w := div_pos (zpow_pos hp _) (zpow_pos hq _)
+    have hne : (m : ℝ) * Real.log p - (n : ℝ) * Real.log q ≠ 0 :=
+      fun he ↦ hn (by rw [← hexp, he, Real.exp_zero])
+    by_cases hs : |w - 1| ≤ 1 / 2
+    · have hc : ‖((w - 1 : ℝ) : ℂ)‖ ≤ 1 / 2 := by simpa only [Complex.norm_real, Real.norm_eq_abs] using hs
+      have hu := Complex.norm_log_one_add_half_le_self hc
+      rw [show 1 + ((w - 1 : ℝ) : ℂ) = (w : ℂ) by push_cast; ring,
+        ← Complex.ofReal_log hw.le, Complex.norm_real, Real.norm_eq_abs,
+        Complex.norm_real, Real.norm_eq_abs] at hu
+      have h1 := h m n hne
+      rw [← hlog] at h1
+      change _ ≤ |Real.log w| at h1
+      calc
+        _ ≤ (C / 2) / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d := by gcongr; exact min_le_right _ _
+        _ = (C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d) / 2 := by ring
+        _ ≤ |w - 1| := by linarith [abs_nonneg (w - 1)]
+    · exact ((div_le_self (le_min (by norm_num) (by positivity)) (hH _ _ _)).trans
+        (min_le_left _ _)).trans (le_of_not_ge hs)
+
+/-- A non-Liouville real slope is equivalent to polynomial separation of
+the nonzero integer linear forms in that slope. -/
+private theorem not_liouville_iff_integralSlope (x : ℝ) :
+    ¬ Liouville x ↔ ∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, (m : ℝ) * x - n ≠ 0 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ |(m : ℝ) * x - n| := by
+  constructor
+  · intro h
+    simp only [Liouville, not_forall, not_exists, not_and, not_lt] at h
+    obtain ⟨d, hd⟩ := h
+    refine ⟨1 / 2 ^ d, by positivity, d + 1, by omega, ?_⟩
+    intro m n
+    wlog hm : 0 ≤ m generalizing m n
+    · intro hne
+      have he : ((-m : ℤ) : ℝ) * x - ((-n : ℤ) : ℝ) = -((m : ℝ) * x - n) := by push_cast; ring
+      have h' := this (-m) (-n) (by omega) (he ▸ neg_ne_zero.mpr hne)
+      rw [he, abs_neg] at h'
+      simpa only [Int.cast_neg, abs_neg] using h'
+    intro hne
+    let H : ℝ := 1 + |(m : ℝ)| + |(n : ℝ)|
+    have hH : 1 ≤ H := by dsimp [H]; linarith [abs_nonneg (m : ℝ), abs_nonneg (n : ℝ)]
+    rcases eq_or_lt_of_le hm with rfl | hm'
+    · have hn : n ≠ 0 := fun hn ↦ hne (by simp [hn])
+      have hn1 : (1 : ℝ) ≤ |(n : ℝ)| := by exact_mod_cast (Int.add_one_le_iff.mpr (abs_pos.mpr hn))
+      simp only [Int.cast_zero, zero_mul, zero_sub, abs_neg]
+      exact ((div_le_self (by positivity) (one_le_pow₀ (by simp))).trans
+        ((div_le_one₀ (by positivity)).mpr (one_le_pow₀ (by norm_num)))).trans hn1
+    · have hm1 : (1 : ℝ) ≤ m := by exact_mod_cast (show (1 : ℤ) ≤ m by omega)
+      have hmR : (0 : ℝ) < m := by linarith
+      have hid : x - ((2 * n : ℤ) : ℝ) / ((2 * m : ℤ) : ℝ) =
+          ((m : ℝ) * x - n) / m := by push_cast; field_simp
+      have hneq : x ≠ ((2 * n : ℤ) : ℝ) / ((2 * m : ℤ) : ℝ) := by
+        rw [← sub_ne_zero, hid]; exact div_ne_zero hne hmR.ne'
+      have hb := hd (2 * n) (2 * m) (by omega) hneq
+      rw [hid, abs_div, abs_of_pos hmR] at hb
+      push_cast at hb
+      have hb' := (div_le_self (abs_nonneg _) hm1).trans' hb
+      have hmH : (m : ℝ) ≤ H := by dsimp [H]; linarith [le_abs_self (m : ℝ), abs_nonneg (n : ℝ)]
+      change 1 / 2 ^ d / H ^ (d + 1) ≤ _
+      calc
+        _ ≤ 1 / 2 ^ d / H ^ d := by gcongr; omega
+        _ = 1 / (2 * H) ^ d := by rw [mul_pow]; ring
+        _ ≤ 1 / (2 * (m : ℝ)) ^ d := by gcongr
+        _ ≤ _ := hb'
+  · rintro ⟨C, hC, d, hd, hsep⟩ hL
+    let K : ℝ := |x| + 3
+    have hK : 0 < K := by dsimp [K]; positivity
+    obtain ⟨t, ht⟩ := pow_unbounded_of_one_lt (K ^ d / C) (by norm_num : (1 : ℝ) < 2)
+    obtain ⟨a, b, hb, hneq, happ⟩ := hL (d + t + 1)
+    have hb1 : 1 ≤ (b : ℝ) := by exact_mod_cast (show (1 : ℤ) ≤ b by omega)
+    have hb2 : 2 ≤ (b : ℝ) := by exact_mod_cast (show (2 : ℤ) ≤ b by omega)
+    have hb₀ : 0 < (b : ℝ) := by linarith
+    have happ1 : |x - (a : ℝ) / b| < 1 := happ.trans_le
+      ((div_le_one₀ (by positivity)).mpr (one_le_pow₀ hb1))
+    have hsize : |(a : ℝ)| ≤ (|x| + 1) * b := by
+      have hu := abs_sub x (x - (a : ℝ) / b)
+      rw [sub_sub_cancel, abs_div, abs_of_pos hb₀] at hu
+      exact (div_le_iff₀ hb₀).mp (by linarith)
+    have hH : 1 + |(b : ℝ)| + |(a : ℝ)| ≤ K * b := by
+      rw [abs_of_pos hb₀]; dsimp [K]; nlinarith
+    have he : (b : ℝ) * x - (a : ℝ) = b * (x - a / b) := by field_simp
+    have hne : (b : ℝ) * x - a ≠ 0 := he ▸ mul_ne_zero hb₀.ne' (sub_ne_zero.mpr hneq)
+    have hl := hsep b a hne
+    rw [he, abs_mul, abs_of_pos hb₀] at hl
+    rw [abs_of_pos hb₀] at hH
+    have hlow : C / (K * b) ^ d ≤ (b : ℝ) * |x - a / b| :=
+      (div_le_div_of_nonneg_left hC.le (by positivity) (pow_le_pow_left₀ (by positivity) hH d)).trans hl
+    have hh := hlow.trans_lt (mul_lt_mul_of_pos_left happ hb₀)
+    have hu : (b : ℝ) * (1 / (b : ℝ) ^ (d + t + 1)) = 1 / (b ^ d * b ^ t) := by
+      rw [pow_succ, pow_add]; field_simp
+    rw [hu, mul_pow] at hh
+    have hh' := (div_lt_div_iff₀ (by positivity) (by positivity)).mp hh
+    have hbad : C * (b : ℝ) ^ t < K ^ d := by
+      apply lt_of_mul_lt_mul_right (a := (b : ℝ) ^ d)
+      · nlinarith
+      · positivity
+    have ht' := (div_lt_iff₀ hC).mp ht
+    have hbpow := pow_le_pow_left₀ (by norm_num : (0 : ℝ) ≤ 2) hb2 t
+    nlinarith [mul_le_mul_of_nonneg_left hbpow hC.le]
+
+/-- For positive bases with second base different from one, the power-quotient
+estimate is equivalent to finite irrationality measure of the ratio of their
+real logarithms. The equivalence does not require algebraicity. -/
+theorem positive_powerSeparation_iff_not_liouville (p q : ℝ) (hp : 0 < p) (hq : 0 < q) (hq' : q ≠ 1) :
+    (∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, p ^ m / q ^ n ≠ 1 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ |p ^ m / q ^ n - 1|) ↔
+      ¬ Liouville (Real.log p / Real.log q) := by
+  rw [positive_powerSeparation_iff_logForms hp hq, not_liouville_iff_integralSlope]
+  have hQ := Real.log_ne_zero_of_pos_of_ne_one hq hq'
+  have he (m n : ℤ) : (m : ℝ) * Real.log p - n * Real.log q =
+      ((m : ℝ) * (Real.log p / Real.log q) - n) * Real.log q := by field_simp
+  constructor
+  · rintro ⟨C, hC, d, hd, h⟩
+    refine ⟨C / |Real.log q|, div_pos hC (abs_pos.mpr hQ), d, hd, fun m n hn ↦ ?_⟩
+    have hh := h m n ((he m n) ▸ mul_ne_zero hn hQ)
+    rw [he, abs_mul] at hh
+    rw [div_right_comm]
+    exact (div_le_iff₀ (abs_pos.mpr hQ)).mpr hh
+  · rintro ⟨C, hC, d, hd, h⟩
+    refine ⟨C * |Real.log q|, mul_pos hC (abs_pos.mpr hQ), d, hd, fun m n hn ↦ ?_⟩
+    rw [he] at hn ⊢
+    rw [abs_mul, mul_div_right_comm]
+    exact mul_le_mul_of_nonneg_right (h m n (left_ne_zero_of_mul hn)) (abs_nonneg _)
+
+/-- The project's exponential-lattice estimate for integers gives finite
+irrationality measure for their logarithm ratio, including the dependent
+case. Its sole arithmetic input is the integer two-logarithm theorem. -/
+private theorem natural_logRatio_not_liouville (p q : ℕ) (hp : 1 < p) (hq : 1 < q) :
+    ¬ Liouville (Real.log p / Real.log q) := by
+  apply (not_liouville_iff_integralSlope _).mpr
+  obtain ⟨d, B, hB, hb⟩ := RiemannMasullo.polynomial_bound_inv_one_sub_of_exp_eq_one q p 1 hq hp (by decide)
+  let x := Real.log (p : ℝ) / Real.log (q : ℝ)
+  let A := 2 * Real.pi / Real.log (q : ℝ)
+  have hQ : 0 < Real.log (q : ℝ) := Real.log_pos (by exact_mod_cast hq)
+  have hlogQ : Complex.log (q : ℂ) ≠ 0 := by
+    rw [show (q : ℂ) = ((q : ℝ) : ℂ) by norm_cast, ← Complex.ofReal_log (by positivity : 0 ≤ (q : ℝ))]
+    exact Complex.ofReal_ne_zero.mpr hQ.ne'
+  have hA : 0 < A := div_pos (by positivity) hQ
+  let K := 1 + A
+  have hK : 0 < K := by dsimp [K]; positivity
+  let D := 1 + B * K ^ d * (2 * Real.pi)
+  have hD : 1 ≤ D := by dsimp [D]; exact le_add_of_nonneg_right (by positivity)
+  have hD₀ : 0 < D := zero_lt_one.trans_le hD
+  refine ⟨1 / D, by positivity, d + 1, by omega, ?_⟩
+  intro m n hn
+  let t : ℝ := (m : ℝ) * x - n
+  let s : ℂ := Complex.I * ((-A * m : ℝ) : ℂ)
+  let z := Complex.exp (Complex.I * ((2 * Real.pi * t : ℝ) : ℂ))
+  let H := 1 + |(m : ℝ)| + |(n : ℝ)|
+  have hH : 1 ≤ H := by dsimp [H]; linarith [abs_nonneg (m : ℝ), abs_nonneg (n : ℝ)]
+  have hPeriod (j : ℤ) : Complex.exp ((j : ℂ) * (2 * Real.pi * Complex.I)) = 1 := by
+    rw [Complex.exp_int_mul, Complex.exp_two_pi_mul_I, one_zpow]
+  have hqres : Complex.exp ((1 : ℕ) * (-(Real.log (q : ℝ) : ℂ) * s)) = 1 := by
+    rw [show ((1 : ℕ) : ℂ) * (-(Real.log (q : ℝ) : ℂ) * s) = (m : ℂ) * (2 * Real.pi * Complex.I) by
+      dsimp [s,A]; push_cast; field_simp [hlogQ]]
+    exact hPeriod m
+  have hpres : z ^ (1 : ℕ) = Complex.exp ((1 : ℕ) * (-(Real.log (p : ℝ) : ℂ) * s)) := by
+    rw [pow_one]
+    have he : Complex.I * ((2 * Real.pi * t : ℝ) : ℂ) =
+        ((1 : ℕ) : ℂ) * (-(Real.log (p : ℝ) : ℂ) * s) - (n : ℂ) * (2 * Real.pi * Complex.I) := by
+      dsimp [t,x,s,A]; push_cast; field_simp
+    change Complex.exp _ = _
+    rw [he, Complex.exp_sub, hPeriod, div_one]
+  have hs : 1 + ‖s‖ ≤ K * H := by
+    have hM : |(m : ℝ)| ≤ H := by dsimp [H]; linarith [abs_nonneg (n : ℝ)]
+    dsimp [s]; rw [norm_mul, Complex.norm_I, one_mul, Complex.norm_real, Real.norm_eq_abs,
+      abs_mul, abs_neg, abs_of_pos hA]
+    dsimp [K]; nlinarith [mul_le_mul_of_nonneg_left hM hA.le]
+  have hsmall : 1 / D / H ^ (d + 1) ≤ 1 := (div_le_self (by positivity) (one_le_pow₀ hH)).trans
+    ((div_le_one₀ hD₀).mpr hD)
+  change 1 / D / H ^ (d + 1) ≤ |t|
+  by_cases hz : z = 1
+  · obtain ⟨k,hk⟩ := Complex.exp_eq_one_iff.mp hz
+    have hik := congrArg Complex.im hk
+    simp [Complex.mul_im] at hik
+    have ht : t = (k : ℝ) := by nlinarith [Real.pi_pos]
+    have hk₀ : k ≠ 0 := fun he ↦ hn (by change t = 0; rw [ht, he]; simp)
+    have hk₁ : (1 : ℝ) ≤ |(k : ℝ)| := by exact_mod_cast (Int.add_one_le_iff.mpr (abs_pos.mpr hk₀))
+    exact hsmall.trans (ht ▸ hk₁)
+  · have hi := hb s z hqres hpres
+    have hz₀ : 0 < ‖1 - z‖ := norm_pos_iff.mpr (sub_ne_zero.mpr (Ne.symm hz))
+    rw [norm_inv, inv_le_iff_one_le_mul₀ hz₀] at hi
+    have hch : ‖1 - z‖ ≤ (2 * Real.pi) * |t| := by
+      rw [norm_sub_rev]
+      simpa only [z, Real.norm_eq_abs, abs_mul, abs_of_pos (show (0 : ℝ) < 2 by norm_num),
+        abs_of_pos Real.pi_pos] using (Real.norm_exp_I_mul_ofReal_sub_one_le (x := 2 * Real.pi * t))
+    have hstep : 1 ≤ B * (K * H) ^ d * ((2 * Real.pi) * |t|) := by
+      apply hi.trans
+      calc
+        _ = B * (1 + ‖s‖) ^ d * ‖1 - z‖ := by ring
+        _ ≤ _ := by gcongr
+    rw [mul_pow] at hstep
+    have hlarge : 1 ≤ D * H ^ (d + 1) * |t| := by
+      have htop : B * K ^ d * (2 * Real.pi) ≤ D := by dsimp [D]; linarith
+      calc
+        _ ≤ B * (K ^ d * H ^ d) * (2 * Real.pi * |t|) := hstep
+        _ = (B * K ^ d * (2 * Real.pi)) * H ^ d * |t| := by ring
+        _ ≤ _ := by gcongr; omega
+    apply (div_le_iff₀ (by positivity : 0 < H ^ (d + 1))).mpr
+    apply (div_le_iff₀ hD₀).mpr
+    linarith [show |t| * H ^ (d + 1) * D = D * H ^ (d + 1) * |t| by ring]
+
+/-- The integer two-logarithm input suffices for all positive bases having
+nonzero integral powers that are integers greater than one. Negative powers
+allow reciprocals of positive real radicals as well. -/
+theorem positive_powerSeparation_of_natural_powers {p q : ℝ} (hp : 0 < p) (hq : 0 < q)
+    (P Q : ℕ) (hP : 1 < P) (hQ : 1 < Q) (r s : ℤ) (hr : r ≠ 0) (hs : s ≠ 0)
+    (hpr : p ^ r = (P : ℝ)) (hqs : q ^ s = (Q : ℝ)) :
+    ∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, p ^ m / q ^ n ≠ 1 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ |p ^ m / q ^ n - 1| := by
+  apply (positive_powerSeparation_iff_logForms hp hq).mpr
+  have hP' : (1 : ℝ) < P := by exact_mod_cast hP
+  have hQ' : (1 : ℝ) < Q := by exact_mod_cast hQ
+  have hP₀ := zero_lt_one.trans hP'
+  have hQ₀ := zero_lt_one.trans hQ'
+  have hnat := (positive_powerSeparation_iff_not_liouville (P : ℝ) (Q : ℝ) hP₀ hQ₀ hQ'.ne').mpr
+    (natural_logRatio_not_liouville P Q hP hQ)
+  obtain ⟨C, hC, d, hd, hlog⟩ := (positive_powerSeparation_iff_logForms hP₀ hQ₀).mp hnat
+  have hlogP : Real.log (P : ℝ) = (r : ℝ) * Real.log p := by rw [← hpr, Real.log_zpow]
+  have hlogQ : Real.log (Q : ℝ) = (s : ℝ) * Real.log q := by rw [← hqs, Real.log_zpow]
+  let K := 1 + |(r : ℝ)| + |(s : ℝ)|
+  let D := |(r : ℝ) * s|
+  have hK : 0 < K := by dsimp [K]; positivity
+  have hrs : (r : ℝ) * s ≠ 0 := by exact_mod_cast mul_ne_zero hr hs
+  have hD : 0 < D := abs_pos.mpr hrs
+  refine ⟨C / K ^ d / D, by positivity, d, hd, ?_⟩
+  intro m n hn
+  let H := 1 + |(m : ℝ)| + |(n : ℝ)|
+  have hH : 0 < H := by dsimp [H]; positivity
+  have he : ((s * m : ℤ) : ℝ) * Real.log P - ((r * n : ℤ) : ℝ) * Real.log Q =
+      ((r : ℝ) * s) * ((m : ℝ) * Real.log p - n * Real.log q) := by
+    rw [hlogP, hlogQ]; push_cast; ring
+  have ht := hlog (s * m) (r * n) (he ▸ mul_ne_zero hrs hn)
+  rw [he, abs_mul] at ht
+  have hbase : 1 + |((s * m : ℤ) : ℝ)| + |((r * n : ℤ) : ℝ)| ≤ K * H := by
+    simp only [Int.cast_mul, abs_mul, K, H]
+    nlinarith [mul_nonneg (abs_nonneg (r : ℝ)) (abs_nonneg (m : ℝ)),
+      mul_nonneg (abs_nonneg (s : ℝ)) (abs_nonneg (n : ℝ)),
+      abs_nonneg (r : ℝ), abs_nonneg (s : ℝ), abs_nonneg (m : ℝ), abs_nonneg (n : ℝ)]
+  have hh : C / (K * H) ^ d ≤ D * |(m : ℝ) * Real.log p - n * Real.log q| :=
+    (div_le_div_of_nonneg_left hC.le (by positivity) (pow_le_pow_left₀ (by positivity) hbase _)).trans ht
+  calc
+    _ = (C / (K * H) ^ d) / D := by rw [mul_pow]; ring
+    _ ≤ _ := (div_le_iff₀ hD).mpr (by simpa [mul_comm] using hh)
+
+/-- Residual classical two-logarithm input for positive algebraic bases. Its
+ratio has finite irrationality measure even when one of the two bases has
+no integral power which is an integer greater than one. The complementary
+case is covered by the project's integer two-logarithm input. -/
+private theorem algebraic_logRatio_not_liouville_without_natural_powers (p q : ℝ)
+    (hp : 0 < p) (hq : 0 < q) (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
+    (hind : ∀ m n : ℤ, p ^ m = q ^ n → m = 0 ∧ n = 0)
+    (houtside : ¬ ∃ (P Q : ℕ) (r s : ℤ), 1 < P ∧ 1 < Q ∧ r ≠ 0 ∧ s ≠ 0 ∧
+      p ^ r = (P : ℝ) ∧ q ^ s = (Q : ℝ)) :
+    ¬ Liouville (Real.log p / Real.log q) := by
+  sorry
+
 /-- Classical input: the multiplicatively independent, positive-real two-logarithm case
 of Baker and Wüstholz, *Logarithmic forms and group varieties*, J. reine angew. Math. 442
 (1993), 19–62. For two fixed positive algebraic numbers, nonidentity power quotients stay
-an inverse-polynomial distance from one. Near one the real logarithm is Lipschitz. -/
+an inverse-polynomial distance from one. The integer two-logarithm input handles pairs
+with integral powers that are natural numbers greater than one. The remaining classical
+input is finite irrationality measure for the real logarithm ratio. -/
 private theorem positive_independent_power_separation (p q : ℝ) (hp : 0 < p) (hq : 0 < q)
     (hpA : IsAlgebraic ℚ p) (hqA : IsAlgebraic ℚ q)
     (hind : ∀ m n : ℤ, p ^ m = q ^ n → m = 0 ∧ n = 0) :
     ∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, p ^ m / q ^ n ≠ 1 →
       C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ |p ^ m / q ^ n - 1| := by
-  sorry
+  by_cases hnat : ∃ (P Q : ℕ) (r s : ℤ), 1 < P ∧ 1 < Q ∧ r ≠ 0 ∧ s ≠ 0 ∧
+      p ^ r = (P : ℝ) ∧ q ^ s = (Q : ℝ)
+  · obtain ⟨P, Q, r, s, hP, hQ, hr, hs, heP, heQ⟩ := hnat
+    exact positive_powerSeparation_of_natural_powers hp hq P Q hP hQ r s hr hs heP heQ
+  · have hq' : q ≠ 1 := by
+      intro hq1
+      have h := hind 0 1 (by simp [hq1])
+      omega
+    exact (positive_powerSeparation_iff_not_liouville p q hp hq hq').mpr
+      (algebraic_logRatio_not_liouville_without_natural_powers p q hp hq hpA hqA hind hnat)
+
+/-- If the exponentials of u and v are multiplicatively independent, any
+choices of these two logarithms are rationally independent together with
+the principal logarithm of -1. Doubling a relation removes the torsion
+factor before applying multiplicative independence. -/
+private theorem linearIndependent_twoLogs_and_log_neg_one_of_independentPowers {u v : ℂ}
+    (hind : ∀ m n : ℤ, Complex.exp u ^ m = Complex.exp v ^ n → m = 0 ∧ n = 0) :
+    LinearIndependent ℚ ![u, v, Complex.log (-1)] := by
+  apply (LinearIndependent.iff_fractionRing ℤ ℚ).mp
+  apply Fintype.linearIndependent_iff.mpr
+  intro c hc
+  have H : (c 0 : ℂ) * u + (c 1 : ℂ) * v + (c 2 : ℂ) * Complex.log (-1) = 0 := by
+    simpa [Fin.sum_univ_three, zsmul_eq_mul, add_assoc] using hc
+  have hE : Complex.exp u ^ (2 * c 0) * Complex.exp v ^ (2 * c 1) = 1 := by
+    have he : Complex.exp (((2 * c 0 : ℤ) : ℂ) * u + ((2 * c 1 : ℤ) : ℂ) * v +
+        (c 2 : ℂ) * (2 * Real.pi * Complex.I)) = 1 := by
+      rw [show ((2 * c 0 : ℤ) : ℂ) * u + ((2 * c 1 : ℤ) : ℂ) * v +
+          (c 2 : ℂ) * (2 * Real.pi * Complex.I) = 2 * ((c 0 : ℂ) * u +
+          (c 1 : ℂ) * v + (c 2 : ℂ) * Complex.log (-1)) by
+        rw [Complex.log_neg_one]; push_cast; ring, H, mul_zero, Complex.exp_zero]
+    simpa only [Complex.exp_add, Complex.exp_int_mul, Complex.exp_two_pi_mul_I,
+      one_zpow, mul_one] using he
+  have heq : Complex.exp u ^ (2 * c 0) = Complex.exp v ^ (-(2 * c 1)) := by
+    rw [zpow_neg, ← mul_eq_one_iff_eq_inv₀ (zpow_ne_zero _ (Complex.exp_ne_zero _))]
+    exact hE
+  obtain ⟨h₀, h₁⟩ := hind _ _ heq
+  have hc₀ : c 0 = 0 := by omega
+  have hc₁ : c 1 = 0 := by omega
+  rw [hc₀, hc₁, Int.cast_zero, zero_mul, zero_mul, zero_add, zero_add] at H
+  have hp : Complex.log (-1) ≠ 0 := by
+    rw [Complex.log_neg_one]
+    exact mul_ne_zero (Complex.ofReal_ne_zero.mpr Real.pi_ne_zero) Complex.I_ne_zero
+  have hc₂ : c 2 = 0 := by exact_mod_cast (mul_eq_zero.mp H).resolve_right hp
+  intro i
+  fin_cases i <;> assumption
+
+/-- A rational relation between the principal period and the two logarithms
+is exactly the obstruction to multiplicative independence. This applies
+to every choice of logarithms, including those shifted by integral periods. -/
+theorem linearIndependent_twoLogs_and_log_neg_one_iff {u v : ℂ} :
+    LinearIndependent ℚ ![u, v, Complex.log (-1)] ↔
+      ∀ m n : ℤ, Complex.exp u ^ m = Complex.exp v ^ n → m = 0 ∧ n = 0 := by
+  refine ⟨?_, linearIndependent_twoLogs_and_log_neg_one_of_independentPowers⟩
+  intro h m n he
+  have hind := Fintype.linearIndependent_iff.mp ((LinearIndependent.iff_fractionRing ℤ ℚ).mpr h)
+  have hex : Complex.exp ((m : ℂ) * u - (n : ℂ) * v) = 1 := by
+    rw [Complex.exp_sub, Complex.exp_int_mul, Complex.exp_int_mul, he, div_self (zpow_ne_zero _ (Complex.exp_ne_zero _))]
+  obtain ⟨k, hk⟩ := Complex.exp_eq_one_iff.mp hex
+  let c : Fin 3 → ℤ := ![m, -n, -(2 * k)]
+  have hzero : ∑ i : Fin 3, c i • (![u, v, Complex.log (-1)] i) = 0 := by
+    simp [c, Fin.sum_univ_three, zsmul_eq_mul, Complex.log_neg_one]
+    linear_combination hk
+  exact ⟨hind c hzero 0, by simpa [c] using hind c hzero 1⟩
+
+/-- The fixed input-polynomial data used by the independent Baker–Feldman
+bound exist for every algebraic exponential. -/
+private theorem integerPolynomial_witness_of_algebraic {z : ℂ} (hz : IsAlgebraic ℚ z) :
+    ∃ p : Polynomial ℤ, 0 < p.natDegree ∧ Polynomial.aeval z p = 0 ∧
+      ∃ H : ℝ, 1 ≤ H ∧ ∀ j, |(p.coeff j : ℝ)| ≤ H := by
+  obtain ⟨p, hp, he⟩ := (IsFractionRing.isAlgebraic_iff ℤ ℚ ℂ).mpr hz
+  refine ⟨p, ?_, he, max 1 (∑ i ∈ p.support, |(p.coeff i : ℝ)|), le_max_left _ _, ?_⟩
+  · by_contra! hd
+    have hc := Polynomial.eq_C_of_natDegree_eq_zero (Nat.eq_zero_of_le_zero hd)
+    rw [hc, Polynomial.aeval_C] at he
+    have hzero : p.coeff 0 = 0 := (FaithfulSMul.algebraMap_injective ℤ ℂ) (he.trans (map_zero _).symm)
+    exact hp (by simpa [hzero] using hc)
+  · intro j
+    by_cases hj : j ∈ p.support
+    · exact (Finset.single_le_sum (f := fun i ↦ |(p.coeff i : ℝ)|)
+        (fun i _ ↦ abs_nonneg _) hj).trans (le_max_right _ _)
+    · simp [Polynomial.notMem_support_iff.mp hj]
+
+/-- The principal logarithm of any nonzero power quotient has an even winding
+coefficient of size at most one plus the sum of the two input coefficient sizes. -/
+private theorem powerQuotient_log_winding {a b : ℂ} (ha : a ≠ 0) (hb : b ≠ 0)
+    (m n : ℤ) : ∃ k : ℤ, |((2 * k : ℤ) : ℝ)| ≤ 1 + |(m : ℝ)| + |(n : ℝ)| ∧
+      (m : ℂ) * Complex.log a - (n : ℂ) * Complex.log b - (2 * (k : ℂ)) * Complex.log (-1) =
+        Complex.log (a ^ m / b ^ n) := by
+  let w := a ^ m / b ^ n
+  let L := (m : ℂ) * Complex.log a - (n : ℂ) * Complex.log b
+  have hL : Complex.exp L = w := by
+    dsimp [L, w]
+    rw [Complex.exp_sub, Complex.exp_int_mul, Complex.exp_int_mul, Complex.exp_log ha, Complex.exp_log hb]
+  have hw : w ≠ 0 := div_ne_zero (zpow_ne_zero _ ha) (zpow_ne_zero _ hb)
+  obtain ⟨k, hk⟩ := Complex.exp_eq_exp_iff_exists_int.mp (hL.trans (Complex.exp_log hw).symm)
+  refine ⟨k, ?_, ?_⟩
+  · have hk' : (k : ℂ) * (2 * Real.pi * Complex.I) = L - Complex.log w := by rw [hk]; ring
+    have him := congrArg Complex.im hk'
+    simp [L, Complex.mul_im, Complex.log_im] at him
+    have hl : |(m : ℝ) * a.arg - (n : ℝ) * b.arg - w.arg| ≤
+        |(m : ℝ)| * Real.pi + |(n : ℝ)| * Real.pi + Real.pi := calc
+      _ ≤ (|(m : ℝ) * a.arg| + |(n : ℝ) * b.arg|) + |w.arg| :=
+        (abs_sub _ _).trans (add_le_add (abs_sub _ _) le_rfl)
+      _ ≤ _ := by
+        rw [abs_mul, abs_mul]
+        gcongr <;> apply Complex.abs_arg_le_pi
+    rw [← him] at hl
+    push_cast
+    rw [abs_mul, abs_of_pos (by norm_num : (0 : ℝ) < 2)]
+    simp only [abs_mul, abs_of_pos Real.pi_pos, abs_of_pos (by norm_num : (0 : ℝ) < 2)] at hl
+    exact le_of_mul_le_mul_right (by nlinarith : 2 * |(k : ℝ)| * Real.pi ≤ _) Real.pi_pos
+  · change L - _ = Complex.log w
+    rw [hk, Complex.log_neg_one]
+    ring
+
+/-- Integer coefficients, including zero, have the degree-one polynomial
+witness required by a Baker–Feldman estimate of bounded algebraic degree. -/
+private theorem logCoefficient_integer_linearPolynomial (c : ℤ) (B : ℝ) (hB : 1 ≤ B)
+    (hc : |(c : ℝ)| ≤ B) : ∃ p : Polynomial ℤ, p.natDegree = 1 ∧
+      Polynomial.aeval (c : ℂ) p = 0 ∧ ∀ j, |(p.coeff j : ℝ)| ≤ B := by
+  refine ⟨Polynomial.X - Polynomial.C c, Polynomial.natDegree_X_sub_C _, by simp, ?_⟩
+  intro j
+  rw [Polynomial.coeff_sub, Polynomial.coeff_X, Polynomial.coeff_C]
+  rcases j with _ | _ | j
+  · simpa using hc
+  · simpa using hB
+  · simpa using hB.trans' zero_le_one
+
+/-- The rank-three, degree-one specialization of the independent Baker–Feldman
+bound. Each fixed logarithm comes with algebraic input data. The algebraic
+coefficients of the linear form vary with the height bound. -/
+def BakerFeldmanIndependentThree : Prop :=
+  ∀ (l : Fin 3 → ℂ) (p : Fin 3 → Polynomial ℤ) (H : Fin 3 → ℝ),
+      (∀ i, 0 < (p i).natDegree ∧ 1 ≤ H i ∧ (∀ j, |((p i).coeff j : ℝ)| ≤ H i) ∧
+        Polynomial.aeval (Complex.exp (l i)) (p i) = 0) → LinearIndependent ℚ l →
+      ∃ d : ℕ, ∀ B : ℝ, 2 ≤ B → ∀ β : Fin 4 → ℂ,
+        (∀ i, ∃ q : Polynomial ℤ, q.natDegree = 1 ∧ Polynomial.aeval (β i) q = 0 ∧
+          ∀ j, |(q.coeff j : ℝ)| ≤ B) → β ≠ 0 →
+        1 / B ^ d ≤ ‖β 0 + ∑ i : Fin 3, β i.succ * l i‖
+
+/-- Specialize the independent Baker–Feldman bound in rank three and
+coefficient degree one to any two independent nonzero algebraic numbers.
+This includes the positive-real and unit-circle cases of Theorem 7.3.3.4. Its
+hypothesis is `BAKER_LOWER_BOUND_INDEPENDENT` in HOL Light's
+`Baker/theorem.ml`, with the input and coefficient polynomials over ℤ.
+All independence, polynomial-height and logarithm-branch obligations are
+discharged here. -/
+theorem powerSeparation_of_bakerFeldman_independent
+    (hcore : BakerFeldmanIndependentThree)
+    (a b : ℂ) (haA : IsAlgebraic ℚ a) (hbA : IsAlgebraic ℚ b) (ha₀ : a ≠ 0) (hb₀ : b ≠ 0)
+    (hind : ∀ m n : ℤ, a ^ m = b ^ n → m = 0 ∧ n = 0) :
+    ∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, a ^ m / b ^ n ≠ 1 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ ‖a ^ m / b ^ n - 1‖ := by
+  let l : Fin 3 → ℂ := ![Complex.log a, Complex.log b, Complex.log (-1)]
+  have he (i) : IsAlgebraic ℚ (Complex.exp (l i)) := by
+    fin_cases i <;> simp [l, Complex.exp_log, ha₀, hb₀, haA, hbA, isAlgebraic_one.neg]
+  choose p hp heval H hH hcoef using fun i ↦ integerPolynomial_witness_of_algebraic (he i)
+  have hlin : LinearIndependent ℚ l := linearIndependent_twoLogs_and_log_neg_one_iff.mpr
+    (by simpa [Complex.exp_log ha₀, Complex.exp_log hb₀] using hind)
+  obtain ⟨d, hbound⟩ := hcore l p H (fun i ↦ ⟨hp i, hH i, hcoef i, heval i⟩) hlin
+  refine ⟨(1 / 2) / 2 ^ d, by positivity, d + 1, by omega, ?_⟩
+  intro m n hne
+  let H₀ : ℝ := 1 + |(m : ℝ)| + |(n : ℝ)|
+  have hH₀ : 1 ≤ H₀ := by dsimp [H₀]; linarith [abs_nonneg (m : ℝ), abs_nonneg (n : ℝ)]
+  obtain ⟨k, hk, hlog⟩ := powerQuotient_log_winding ha₀ hb₀ m n
+  let c : Fin 4 → ℤ := ![0, m, -n, -(2 * k)]
+  let β : Fin 4 → ℂ := fun i ↦ (c i : ℂ)
+  have hc (i) : |((c i : ℤ) : ℝ)| ≤ 2 * H₀ := by
+    have hm : |(m : ℝ)| ≤ H₀ := by dsimp [H₀]; linarith [abs_nonneg (n : ℝ)]
+    have hn : |(n : ℝ)| ≤ H₀ := by dsimp [H₀]; linarith [abs_nonneg (m : ℝ)]
+    have htwo : H₀ ≤ 2 * H₀ := by linarith
+    fin_cases i
+    · simp [c]; linarith
+    · exact hm.trans htwo
+    · simpa [c] using hn.trans htwo
+    · simpa [c] using hk.trans htwo
+  have hβ : β ≠ 0 := by
+    intro h
+    have hmC : (m : ℂ) = 0 := by simpa [β, c] using congrFun h (1 : Fin 4)
+    have hnC : (n : ℂ) = 0 := by simpa [β, c] using congrFun h (2 : Fin 4)
+    have hm : m = 0 := by exact_mod_cast hmC
+    have hn : n = 0 := by exact_mod_cast hnC
+    simp [hm, hn] at hne
+  have hl : β 0 + ∑ i : Fin 3, β i.succ * l i = Complex.log (a ^ m / b ^ n) := by
+    convert hlog using 1
+    simp [β, c, l, Fin.sum_univ_three]
+    ring
+  have hh := hbound (2 * H₀) (by linarith) β
+    (fun i ↦ logCoefficient_integer_linearPolynomial (c i) _ (by linarith) (hc i)) hβ
+  rw [hl] at hh
+  let w := a ^ m / b ^ n
+  have hlow : (1 / 2 : ℝ) / 2 ^ d / H₀ ^ (d + 1) ≤ (1 / 2) * (1 / (2 * H₀) ^ d) := calc
+    _ ≤ (1 / 2 : ℝ) / 2 ^ d / H₀ ^ d := by gcongr; omega
+    _ = _ := by rw [mul_pow]; ring
+  change (1 / 2 : ℝ) / 2 ^ d / H₀ ^ (d + 1) ≤ ‖w - 1‖
+  apply hlow.trans
+  by_cases hnear : ‖w - 1‖ ≤ 1 / 2
+  · have hc := Complex.norm_log_one_add_half_le_self hnear
+    rw [show 1 + (w - 1) = w by ring] at hc
+    change 1 / (2 * H₀) ^ d ≤ ‖Complex.log w‖ at hh
+    linarith [norm_nonneg (w - 1)]
+  · have hpow : (1 : ℝ) ≤ (2 * H₀) ^ d := one_le_pow₀ (by linarith)
+    have hsmall : 1 / (2 * H₀) ^ d ≤ (1 : ℝ) := (div_le_one₀ (by positivity)).mpr hpow
+    linarith
+
+/-- For independent phases, an inverse-polynomial chord estimate is
+equivalent to an inverse-polynomial lower bound on every integral angular
+form, including odd coefficients of π. The bound is uniform in the
+winding integer. Squaring the phases removes its parity. -/
+theorem circle_powerSeparation_iff_argumentForms (a b : ℂ) (ha : ‖a‖ = 1) (hb : ‖b‖ = 1)
+    (hind : ∀ m n : ℤ, a ^ m = b ^ n → m = 0 ∧ n = 0) :
+    (∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n : ℤ, a ^ m / b ^ n ≠ 1 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤ ‖a ^ m / b ^ n - 1‖) ↔
+    (∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n k : ℤ, m ≠ 0 ∨ n ≠ 0 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)|) ^ d ≤
+        |(m : ℝ) * a.arg - (n : ℝ) * b.arg - (k : ℝ) * Real.pi|) := by
+  have ha₀ := norm_ne_zero_iff.mp (ha.trans_ne one_ne_zero)
+  have hb₀ := norm_ne_zero_iff.mp (hb.trans_ne one_ne_zero)
+  have hlog {w : ℂ} (hw : ‖w‖ = 1) : Complex.log w = Complex.I * (w.arg : ℂ) := by
+    simp [Complex.log, hw, mul_comm]
+  constructor
+  · rintro ⟨C, hC, d, hd, hsep⟩
+    refine ⟨C / (2 * 2 ^ d), by positivity, d, hd, ?_⟩
+    intro m n k hmn
+    let x : ℝ := (m : ℝ) * a.arg - (n : ℝ) * b.arg - (k : ℝ) * Real.pi
+    have hne : a ^ (2 * m) / b ^ (2 * n) ≠ 1 := by
+      intro h
+      have h' := hind _ _ ((div_eq_one_iff_eq (zpow_ne_zero (2 * n) hb₀)).mp h)
+      omega
+    have hE : Complex.exp (Complex.I * ((2 * x : ℝ) : ℂ)) =
+        a ^ (2 * m) / b ^ (2 * n) := by
+      rw [show Complex.I * ((2 * x : ℝ) : ℂ) =
+        (((2 * m : ℤ) : ℂ) * Complex.log a - ((2 * n : ℤ) : ℂ) * Complex.log b) -
+          (k : ℂ) * (2 * Real.pi * Complex.I) by
+        rw [hlog ha, hlog hb]; dsimp [x]; push_cast; ring]
+      simp only [Complex.exp_sub, Complex.exp_int_mul, Complex.exp_log ha₀, Complex.exp_log hb₀,
+        Complex.exp_two_pi_mul_I, one_zpow, div_one]
+    have hupper := Real.norm_exp_I_mul_ofReal_sub_one_le (x := 2 * x)
+    rw [hE, Real.norm_eq_abs, abs_mul, abs_of_pos (by norm_num : (0 : ℝ) < 2)] at hupper
+    have hlow := (hsep (2 * m) (2 * n) hne).trans hupper
+    let M : ℝ := 1 + |(m : ℝ)| + |(n : ℝ)|
+    have hM : 0 < M := by dsimp [M]; positivity
+    have hh : 1 + |((2 * m : ℤ) : ℝ)| + |((2 * n : ℤ) : ℝ)| ≤ 2 * M := by
+      simp [M, abs_mul]; linarith
+    have hbound : C / (2 * M) ^ d ≤ 2 * |x| := (div_le_div_of_nonneg_left hC.le (by positivity)
+      (pow_le_pow_left₀ (by positivity) hh d)).trans hlow
+    change C / (2 * 2 ^ d) / M ^ d ≤ |x|
+    calc
+      _ = (C / (2 * M) ^ d) / 2 := by rw [mul_pow]; ring
+      _ ≤ _ := by linarith
+  · rintro ⟨C, hC, d, hd, hsep⟩
+    refine ⟨(2 / Real.pi) * C, by positivity, d, hd, ?_⟩
+    intro m n hne
+    have hmn : m ≠ 0 ∨ n ≠ 0 := by by_contra! h; simp [h] at hne
+    obtain ⟨k, -, hwind⟩ := powerQuotient_log_winding ha₀ hb₀ m n
+    have hh := hsep m n (2 * k) hmn
+    have heq : Complex.log (a ^ m / b ^ n) = Complex.I *
+        (((m : ℝ) * a.arg - (n : ℝ) * b.arg - ((2 * k : ℤ) : ℝ) * Real.pi : ℝ) : ℂ) := by
+      rw [← hwind, hlog ha, hlog hb, Complex.log_neg_one]; push_cast; ring
+    have hn := congrArg norm heq
+    simp only [norm_mul, Complex.norm_I, one_mul, Complex.norm_real, Real.norm_eq_abs] at hn
+    rw [← hn] at hh
+    have hw : ‖a ^ m / b ^ n‖ = 1 := by simp [norm_zpow, ha, hb]
+    rw [mul_div_assoc]
+    exact (mul_le_mul_of_nonneg_left hh (by positivity)).trans
+      ((norm_log_le_chord hw).trans_eq (norm_sub_rev _ _))
+
+/-- The degree-one independent Baker–Feldman bound also implies the full fixed
+three-logarithm estimate for arbitrary nonzero algebraic bases. The radial/angular
+reduction supplies the multiplicatively dependent cases. -/
+theorem fixedThreeLogs_of_bakerFeldman_independent (hcore : BakerFeldmanIndependentThree)
+    (a b : ℂ) (ha : IsAlgebraic ℚ a) (hb : IsAlgebraic ℚ b) (ha₀ : a ≠ 0) (hb₀ : b ≠ 0) :
+    ∃ C > (0 : ℝ), ∃ d : ℕ, 0 < d ∧ ∀ m n k : ℤ,
+      (m : ℂ) * Complex.log a - (n : ℂ) * Complex.log b -
+          (2 * (k : ℂ)) * Complex.log (-1) ≠ 0 →
+      C / (1 + |(m : ℝ)| + |(n : ℝ)| + |(k : ℝ)|) ^ d ≤
+        ‖(m : ℂ) * Complex.log a - (n : ℂ) * Complex.log b -
+          (2 * (k : ℂ)) * Complex.log (-1)‖ := by
+  apply LogarithmicForm.fixed_three_of_powerSeparation ?_ ?_ a b ha hb ha₀ hb₀
+  · intro p q hp hq hpA hqA hind
+    apply powerSeparation_of_bakerFeldman_independent hcore _ _ hpA hqA
+      (Complex.ofReal_ne_zero.mpr hp.ne') (Complex.ofReal_ne_zero.mpr hq.ne')
+    intro m n he
+    exact hind m n (by exact_mod_cast he)
+  · intro u v huA hvA hu hv
+    exact powerSeparation_of_bakerFeldman_independent hcore u v huA hvA
+      (norm_ne_zero_iff.mp (hu.trans_ne one_ne_zero)) (norm_ne_zero_iff.mp (hv.trans_ne one_ne_zero))
 
 /-- Classical input: for two multiplicatively independent algebraic numbers on the unit
 circle, each nonidentity power quotient has an inverse-polynomial distance from one.
